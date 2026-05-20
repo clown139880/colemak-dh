@@ -1,0 +1,104 @@
+name: Build Colemak-DH ZXCV APK
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Add custom no-angle Colemak-DH layout
+        shell: python
+        run: |
+          from pathlib import Path
+          from textwrap import dedent
+
+          root = Path("android/app/src/main/res")
+          raw = root / "raw"
+          xml = root / "xml" / "keyboard_layouts.xml"
+          strings = root / "values" / "strings.xml"
+
+          source = raw / "colemak_dh_iso_us.kcm"
+          custom = raw / "colemak_dh_zxcv_us.kcm"
+
+          text = source.read_text(encoding="utf-8")
+          start = text.index("map key   16")
+          end = text.index("# *B*reve")
+          maps = dedent("""\
+          map key   16    Q
+          map key   17    W
+          map key   18    F
+          map key   19    P
+          map key   20    B
+          map key   21    J
+          map key   22    L
+          map key   23    U
+          map key   24    Y
+          map key   25    SEMICOLON
+
+          map key   30    A
+          map key   31    R
+          map key   32    S
+          map key   33    T
+          map key   34    G
+          map key   35    M
+          map key   36    N
+          map key   37    E
+          map key   38    I
+          map key   39    O
+          map key   40    APOSTROPHE
+
+          map key   44    Z
+          map key   45    X
+          map key   46    C
+          map key   47    D
+          map key   48    V
+          map key   49    K
+          map key   50    H
+
+
+          """)
+          text = "# Colemak Mod-DH ZXCV US\n\n" + text[text.index("type OVERLAY"):start] + maps + text[end:]
+          custom.write_text(text, encoding="utf-8")
+
+          xml_text = xml.read_text(encoding="utf-8")
+          entry = dedent("""
+              <keyboard-layout
+                  android:name="keyboard_layout_colemak_dh_zxcv_us"
+                  android:keyboardLayout="@raw/colemak_dh_zxcv_us"
+                  android:label="@string/keyboard_layout_colemak_dh_zxcv_us" />
+
+          """)
+          xml_text = xml_text.replace("</keyboard-layouts>", entry + "</keyboard-layouts>")
+          xml.write_text(xml_text, encoding="utf-8")
+
+          strings_text = strings.read_text(encoding="utf-8")
+          strings_text = strings_text.replace(
+              "</resources>",
+              '    <string name="keyboard_layout_colemak_dh_zxcv_us">Colemak Mod-DH ZXCV US</string>\n</resources>'
+          )
+          strings.write_text(strings_text, encoding="utf-8")
+
+      - name: Build debug APK
+        working-directory: android
+        run: |
+          chmod +x ./gradlew
+          ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: colemak-dh-zxcv-debug-apk
+          path: android/app/build/outputs/apk/debug/*.apk
